@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "framework": "vite",
+  "build": {
+    "env": {
+      "VITE_SUPABASE_URL": "https://oqtgtmyjgzbsrejwvjfw.supabase.co",
+      "VITE_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_nR1vWGzZHyc6X_CfmDAJ9w_YJsKhFLB",
+      "VITE_API_URL": "https://backend-placeholder.onrender.com/api/v1"
+    }
+  }
+}
