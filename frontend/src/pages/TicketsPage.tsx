@@ -3,7 +3,7 @@ import { formatDistanceToNow } from "date-fns";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Search01Icon, FilterIcon } from "@hugeicons/core-free-icons";
 import { ticketService } from "../services/tickets";
-import type { Ticket, TicketListResponse } from "../types";
+import type { TicketListResponse } from "../types";
 
 import { useTicketContext } from "../contexts/TicketContext";
 
@@ -14,7 +14,7 @@ export const TicketsPage: React.FC = () => {
 
   // Search & Filter state
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter] = useState("All");
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -98,6 +98,8 @@ export const TicketsPage: React.FC = () => {
             <input
               type="text"
               placeholder="Search by ticket or customer..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               className="w-72 h-9 bg-surface border border-border rounded-md pl-8 pr-4 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all shadow-sm"
             />
           </div>
