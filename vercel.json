@@ -5,7 +5,7 @@
   "build": {
     "env": {
       "VITE_SUPABASE_URL": "https://oqtgtmyjgzbsrejwvjfw.supabase.co",
-      "VITE_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_nR1vWGzZHyc6X_CfmDAJ9w_YJsKhFLB",
+      "VITE_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xdGd0bXlqZ3pic3Jland2amZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczMjA4MDgsImV4cCI6MjEwMjg5NjgwOH0.LpBGXiziGEkJLLwK9eanSBSbNxl9GqYlqA65vKFYWDE",
       "VITE_API_URL": "https://backend-placeholder.onrender.com/api/v1"
     }
   }
