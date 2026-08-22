@@ -109,3 +109,15 @@ npm run dev
    - `VITE_SUPABASE_URL`: Your Supabase URL.
    - `VITE_SUPABASE_PUBLISHABLE_KEY`: Your Supabase anon key.
 6. Deploy!
+
+---
+
+## Acknowledgements
+
+This project was built and improved with assistance from AI development tools:
+
+- **OpenAI Codex** — implementation, debugging, testing, deployment, and repository maintenance.
+- **Google Antigravity** — development assistance.
+- **Claude Code** and **Claude** — development assistance.
+
+These are acknowledgements of the tools used; they are not GitHub user accounts or project maintainers.
