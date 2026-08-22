@@ -1,10 +1,8 @@
 import math
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-from sqlalchemy import desc, asc, or_, func
-from sqlalchemy.orm import Session
+from typing import List, Optional, Any, Dict
+from supabase import Client
 
-from app.models.ticket import Ticket
 from app.schemas.ai_analysis import AIAnalysisResult, TicketCategory, TicketPriority, TicketSentiment
 from app.schemas.ticket import (
     TicketCreate,
@@ -18,69 +16,70 @@ from app.schemas.ticket import (
     TicketStatus,
 )
 
-
 def _utc_now():
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).isoformat()
 
-
-def generate_ticket_number(db: Session) -> str:
+def generate_ticket_number(db: Client) -> str:
     """Generate sequential ticket numbers like TICK-1001, TICK-1002."""
-    max_id_query = db.query(func.max(Ticket.id)).scalar()
-    next_id = 1001 if max_id_query is None else 1000 + max_id_query + 1
+    res = db.table("tickets").select("id").order("id", desc=True).limit(1).execute()
+    max_id = res.data[0]["id"] if res.data else 0
+    next_id = 1001 if max_id == 0 else 1000 + max_id + 1
     return f"TICK-{next_id}"
 
-
 def create_ticket(
-    db: Session,
+    db: Client,
     ticket_in: TicketCreate,
     ai_result: AIAnalysisResult
-) -> Ticket:
+) -> TicketResponse:
     """Create and persist a new support ticket with AI metadata."""
     ticket_num = generate_ticket_number(db)
-    
-    db_ticket = Ticket(
-        ticket_number=ticket_num,
-        customer_name=ticket_in.customer_name.strip(),
-        customer_email=str(ticket_in.customer_email).strip().lower(),
-        subject=ticket_in.subject.strip(),
-        message=ticket_in.message.strip(),
-        status=TicketStatus.OPEN.value,
-        category=ai_result.category.value if hasattr(ai_result.category, 'value') else str(ai_result.category),
-        priority=ai_result.priority.value if hasattr(ai_result.priority, 'value') else str(ai_result.priority),
-        sentiment=ai_result.sentiment.value if hasattr(ai_result.sentiment, 'value') else str(ai_result.sentiment),
-        summary=ai_result.summary,
-        customer_intent=ai_result.customer_intent,
-        suggested_action=ai_result.suggested_action,
-        suggested_response=ai_result.suggested_response,
-        confidence_score=ai_result.confidence_score,
-        key_entities=ai_result.key_entities,
-        created_at=_utc_now(),
-        updated_at=_utc_now(),
-    )
-    
-    db.add(db_ticket)
-    db.commit()
-    db.refresh(db_ticket)
-    
+
+    insert_data = {
+        "ticket_number": ticket_num,
+        "customer_name": ticket_in.customer_name.strip(),
+        "customer_email": str(ticket_in.customer_email).strip().lower(),
+        "subject": ticket_in.subject.strip(),
+        "message": ticket_in.message.strip(),
+        "status": TicketStatus.OPEN.value,
+        "category": ai_result.category.value if hasattr(ai_result.category, 'value') else str(ai_result.category),
+        "priority": ai_result.priority.value if hasattr(ai_result.priority, 'value') else str(ai_result.priority),
+        "sentiment": ai_result.sentiment.value if hasattr(ai_result.sentiment, 'value') else str(ai_result.sentiment),
+        "summary": ai_result.summary,
+        "customer_intent": ai_result.customer_intent,
+        "suggested_action": ai_result.suggested_action,
+        "suggested_response": ai_result.suggested_response,
+        "confidence_score": ai_result.confidence_score,
+        "key_entities": ai_result.key_entities,
+        "created_at": _utc_now(),
+        "updated_at": _utc_now(),
+    }
+
+    res = db.table("tickets").insert(insert_data).execute()
+    db_ticket = res.data[0]
+
     # Evaluate automation rules
     from app.services.automation_service import evaluate_automation_rules
     evaluate_automation_rules(db, db_ticket)
-    
-    return db_ticket
 
+    updated_res = db.table("tickets").select("*").eq("id", db_ticket["id"]).execute()
+    return TicketResponse.model_validate(updated_res.data[0])
 
-def get_ticket(db: Session, ticket_id: int) -> Optional[Ticket]:
+def get_ticket(db: Client, ticket_id: int) -> Optional[TicketResponse]:
     """Retrieve ticket by ID."""
-    return db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    res = db.table("tickets").select("*").eq("id", ticket_id).execute()
+    if not res.data:
+        return None
+    return TicketResponse.model_validate(res.data[0])
 
-
-def get_ticket_by_number(db: Session, ticket_number: str) -> Optional[Ticket]:
+def get_ticket_by_number(db: Client, ticket_number: str) -> Optional[TicketResponse]:
     """Retrieve ticket by ticket_number."""
-    return db.query(Ticket).filter(Ticket.ticket_number == ticket_number).first()
-
+    res = db.table("tickets").select("*").eq("ticket_number", ticket_number).execute()
+    if not res.data:
+        return None
+    return TicketResponse.model_validate(res.data[0])
 
 def get_tickets(
-    db: Session,
+    db: Client,
     status: Optional[str] = None,
     priority: Optional[str] = None,
     category: Optional[str] = None,
@@ -92,56 +91,38 @@ def get_tickets(
     sort_order: str = "desc"
 ) -> TicketListResponse:
     """Query tickets with flexible filtering, multi-field search, sorting, and pagination."""
-    query = db.query(Ticket)
-    
-    # Filter by Status
-    if status and status != "All":
-        query = query.filter(Ticket.status == status)
-        
-    # Filter by Priority
-    if priority and priority != "All":
-        query = query.filter(Ticket.priority == priority)
-        
-    # Filter by Category
-    if category and category != "All":
-        query = query.filter(Ticket.category == category)
 
-    # Filter by Sentiment
+    query = db.table("tickets").select("*", count="exact")
+
+    if status and status != "All":
+        query = query.eq("status", status)
+    if priority and priority != "All":
+        query = query.eq("priority", priority)
+    if category and category != "All":
+        query = query.eq("category", category)
     if sentiment and sentiment != "All":
-        query = query.filter(Ticket.sentiment == sentiment)
-        
-    # Search in subject, message, customer_name, customer_email, ticket_number, summary
+        query = query.eq("sentiment", sentiment)
+
     if search:
         search_pattern = f"%{search.strip()}%"
-        query = query.filter(
-            or_(
-                Ticket.subject.ilike(search_pattern),
-                Ticket.message.ilike(search_pattern),
-                Ticket.customer_name.ilike(search_pattern),
-                Ticket.customer_email.ilike(search_pattern),
-                Ticket.ticket_number.ilike(search_pattern),
-                Ticket.summary.ilike(search_pattern),
-                Ticket.customer_intent.ilike(search_pattern),
-            )
-        )
-        
-    total = query.count()
-    
-    # Sorting
-    sort_column = getattr(Ticket, sort_by, Ticket.created_at)
+        query = query.or_(f"subject.ilike.{search_pattern},message.ilike.{search_pattern},customer_name.ilike.{search_pattern},customer_email.ilike.{search_pattern},ticket_number.ilike.{search_pattern},summary.ilike.{search_pattern},customer_intent.ilike.{search_pattern}")
+
     if sort_order.lower() == "asc":
-        query = query.order_by(asc(sort_column))
+        query = query.order(sort_by, desc=False)
     else:
-        query = query.order_by(desc(sort_column))
-        
-    # Pagination
+        query = query.order(sort_by, desc=True)
+
     offset = (page - 1) * limit
-    tickets = query.offset(offset).limit(limit).all()
-    
+    query = query.range(offset, offset + limit - 1)
+
+    res = query.execute()
+    total = res.count if res.count is not None else 0
+    tickets = res.data
+
     total_pages = max(1, math.ceil(total / limit)) if total > 0 else 1
-    
+
     ticket_responses = [TicketResponse.model_validate(t) for t in tickets]
-    
+
     return TicketListResponse(
         tickets=ticket_responses,
         total=total,
@@ -150,145 +131,141 @@ def get_tickets(
         total_pages=total_pages,
     )
 
-
 def update_ticket(
-    db: Session,
+    db: Client,
     ticket_id: int,
     update_in: TicketUpdate
-) -> Optional[Ticket]:
+) -> Optional[TicketResponse]:
     """Update ticket status, agent notes, priority, category, or suggested response."""
-    ticket = get_ticket(db, ticket_id)
-    if not ticket:
-        return None
-        
-    if update_in.status is not None:
-        ticket.status = update_in.status.value if hasattr(update_in.status, 'value') else str(update_in.status)
-        if update_in.status in [TicketStatus.RESOLVED, TicketStatus.CLOSED]:
-            ticket.resolved_at = _utc_now()
-        elif update_in.status in [TicketStatus.OPEN, TicketStatus.IN_PROGRESS]:
-            ticket.resolved_at = None
-            
-    if update_in.agent_notes is not None:
-        ticket.agent_notes = update_in.agent_notes
-        
-    if update_in.priority is not None:
-        ticket.priority = update_in.priority.value if hasattr(update_in.priority, 'value') else str(update_in.priority)
-        
-    if update_in.category is not None:
-        ticket.category = update_in.category.value if hasattr(update_in.category, 'value') else str(update_in.category)
-        
-    if update_in.suggested_response is not None:
-        ticket.suggested_response = update_in.suggested_response
-        
-    ticket.updated_at = _utc_now()
-    db.commit()
-    db.refresh(ticket)
-    return ticket
+    update_data = {}
 
+    if update_in.status is not None:
+        update_data["status"] = update_in.status.value if hasattr(update_in.status, 'value') else str(update_in.status)
+        if update_in.status in [TicketStatus.RESOLVED, TicketStatus.CLOSED]:
+            update_data["resolved_at"] = _utc_now()
+        elif update_in.status in [TicketStatus.OPEN, TicketStatus.IN_PROGRESS]:
+            update_data["resolved_at"] = None
+
+    if update_in.agent_notes is not None:
+        update_data["agent_notes"] = update_in.agent_notes
+
+    if update_in.priority is not None:
+        update_data["priority"] = update_in.priority.value if hasattr(update_in.priority, 'value') else str(update_in.priority)
+
+    if update_in.category is not None:
+        update_data["category"] = update_in.category.value if hasattr(update_in.category, 'value') else str(update_in.category)
+
+    if update_in.suggested_response is not None:
+        update_data["suggested_response"] = update_in.suggested_response
+
+    if not update_data:
+        return get_ticket(db, ticket_id)
+
+    update_data["updated_at"] = _utc_now()
+
+    res = db.table("tickets").update(update_data).eq("id", ticket_id).execute()
+    if not res.data:
+        return None
+
+    return TicketResponse.model_validate(res.data[0])
 
 async def reanalyze_ticket(
-    db: Session,
+    db: Client,
     ticket_id: int,
     gemini_service
-) -> Optional[Ticket]:
+) -> Optional[TicketResponse]:
     """Re-run Gemini AI analysis on an existing ticket and refresh its extracted fields."""
-    ticket = get_ticket(db, ticket_id)
-    if not ticket:
+    res = db.table("tickets").select("*").eq("id", ticket_id).execute()
+    if not res.data:
         return None
-        
+
+    ticket_dict = res.data[0]
+
     ai_result = await gemini_service.analyze_message(
-        customer_name=ticket.customer_name,
-        customer_email=ticket.customer_email,
-        subject=ticket.subject,
-        message=ticket.message
+        customer_name=ticket_dict.get("customer_name", ""),
+        customer_email=ticket_dict.get("customer_email", ""),
+        subject=ticket_dict.get("subject", ""),
+        message=ticket_dict.get("message", "")
     )
-    
-    ticket.category = ai_result.category.value if hasattr(ai_result.category, 'value') else str(ai_result.category)
-    ticket.priority = ai_result.priority.value if hasattr(ai_result.priority, 'value') else str(ai_result.priority)
-    ticket.sentiment = ai_result.sentiment.value if hasattr(ai_result.sentiment, 'value') else str(ai_result.sentiment)
-    ticket.summary = ai_result.summary
-    ticket.customer_intent = ai_result.customer_intent
-    ticket.suggested_action = ai_result.suggested_action
-    ticket.suggested_response = ai_result.suggested_response
-    ticket.confidence_score = ai_result.confidence_score
-    ticket.key_entities = ai_result.key_entities
-    ticket.updated_at = _utc_now()
-    
-    db.commit()
-    db.refresh(ticket)
-    return ticket
 
+    update_data = {
+        "category": ai_result.category.value if hasattr(ai_result.category, 'value') else str(ai_result.category),
+        "priority": ai_result.priority.value if hasattr(ai_result.priority, 'value') else str(ai_result.priority),
+        "sentiment": ai_result.sentiment.value if hasattr(ai_result.sentiment, 'value') else str(ai_result.sentiment),
+        "summary": ai_result.summary,
+        "customer_intent": ai_result.customer_intent,
+        "suggested_action": ai_result.suggested_action,
+        "suggested_response": ai_result.suggested_response,
+        "confidence_score": ai_result.confidence_score,
+        "key_entities": ai_result.key_entities,
+        "updated_at": _utc_now()
+    }
 
-def get_dashboard_stats(db: Session) -> DashboardStats:
+    update_res = db.table("tickets").update(update_data).eq("id", ticket_id).execute()
+    if not update_res.data:
+        return None
+
+    return TicketResponse.model_validate(update_res.data[0])
+
+def get_dashboard_stats(db: Client) -> DashboardStats:
     """Calculate aggregate KPIs, breakdowns, and recent tickets for the React dashboard."""
-    total_tickets = db.query(Ticket).count()
-    
-    high_priority_count = db.query(Ticket).filter(
-        Ticket.priority.in_([TicketPriority.CRITICAL.value, TicketPriority.HIGH.value])
-    ).count()
-    
-    open_tickets = db.query(Ticket).filter(Ticket.status == TicketStatus.OPEN.value).count()
-    in_progress_tickets = db.query(Ticket).filter(Ticket.status == TicketStatus.IN_PROGRESS.value).count()
-    resolved_tickets = db.query(Ticket).filter(
-        Ticket.status.in_([TicketStatus.RESOLVED.value, TicketStatus.CLOSED.value])
-    ).count()
-    
-    avg_confidence_val = db.query(func.avg(Ticket.confidence_score)).scalar() or 0.95
-    
-    # Category Breakdown
-    cat_counts = (
-        db.query(Ticket.category, func.count(Ticket.id))
-        .group_by(Ticket.category)
-        .all()
-    )
+    res = db.table("tickets").select("id, status, priority, category, sentiment, confidence_score").execute()
+    tickets = res.data
+
+    total_tickets = len(tickets)
+
+    high_priority_count = sum(1 for t in tickets if t.get("priority") in [TicketPriority.CRITICAL.value, TicketPriority.HIGH.value])
+    open_tickets = sum(1 for t in tickets if t.get("status") == TicketStatus.OPEN.value)
+    in_progress_tickets = sum(1 for t in tickets if t.get("status") == TicketStatus.IN_PROGRESS.value)
+    resolved_tickets = sum(1 for t in tickets if t.get("status") in [TicketStatus.RESOLVED.value, TicketStatus.CLOSED.value])
+
+    avg_confidence_val = sum(t.get("confidence_score", 0.95) for t in tickets) / total_tickets if total_tickets > 0 else 0.95
+
+    cat_counts_dict = {}
+    for t in tickets:
+        cat = t.get("category")
+        if cat: cat_counts_dict[cat] = cat_counts_dict.get(cat, 0) + 1
+
     category_breakdown = [
         CategoryCount(
             category=cat,
             count=cnt,
             percentage=round((cnt / total_tickets * 100) if total_tickets > 0 else 0, 1)
         )
-        for cat, cnt in sorted(cat_counts, key=lambda x: x[1], reverse=True)
+        for cat, cnt in sorted(cat_counts_dict.items(), key=lambda x: x[1], reverse=True)
     ]
-    
-    # Sentiment Breakdown
-    sent_counts = (
-        db.query(Ticket.sentiment, func.count(Ticket.id))
-        .group_by(Ticket.sentiment)
-        .all()
-    )
+
+    sent_counts_dict = {}
+    for t in tickets:
+        sent = t.get("sentiment")
+        if sent: sent_counts_dict[sent] = sent_counts_dict.get(sent, 0) + 1
+
     sentiment_breakdown = [
         SentimentCount(
             sentiment=sent,
             count=cnt,
             percentage=round((cnt / total_tickets * 100) if total_tickets > 0 else 0, 1)
         )
-        for sent, cnt in sorted(sent_counts, key=lambda x: x[1], reverse=True)
+        for sent, cnt in sorted(sent_counts_dict.items(), key=lambda x: x[1], reverse=True)
     ]
-    
-    # Priority Breakdown
-    prio_counts = (
-        db.query(Ticket.priority, func.count(Ticket.id))
-        .group_by(Ticket.priority)
-        .all()
-    )
+
+    prio_counts_dict = {}
+    for t in tickets:
+        prio = t.get("priority")
+        if prio: prio_counts_dict[prio] = prio_counts_dict.get(prio, 0) + 1
+
     priority_breakdown = [
         PriorityCount(
             priority=prio,
             count=cnt,
             percentage=round((cnt / total_tickets * 100) if total_tickets > 0 else 0, 1)
         )
-        for prio, cnt in sorted(prio_counts, key=lambda x: x[1], reverse=True)
+        for prio, cnt in sorted(prio_counts_dict.items(), key=lambda x: x[1], reverse=True)
     ]
-    
-    # Recent 6 tickets
-    recent_db_tickets = (
-        db.query(Ticket)
-        .order_by(desc(Ticket.created_at))
-        .limit(6)
-        .all()
-    )
-    recent_tickets = [TicketResponse.model_validate(t) for t in recent_db_tickets]
-    
+
+    recent_res = db.table("tickets").select("*").order("created_at", desc=True).limit(6).execute()
+    recent_tickets = [TicketResponse.model_validate(t) for t in recent_res.data]
+
     return DashboardStats(
         total_tickets=total_tickets,
         high_priority_tickets=high_priority_count,
@@ -301,7 +278,6 @@ def get_dashboard_stats(db: Session) -> DashboardStats:
         priority_breakdown=priority_breakdown,
         recent_tickets=recent_tickets,
     )
-
 
 SAMPLE_PRESETS = [
     {
@@ -336,8 +312,7 @@ SAMPLE_PRESETS = [
     }
 ]
 
-
-async def seed_sample_tickets(db: Session, gemini_service) -> List[Ticket]:
+async def seed_sample_tickets(db: Client, gemini_service) -> List[TicketResponse]:
     """Seed sample realistic tickets if database is empty."""
     created = []
     for item in SAMPLE_PRESETS:

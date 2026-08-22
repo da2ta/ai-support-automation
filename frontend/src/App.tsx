@@ -6,13 +6,14 @@ import { TicketsPage } from "./pages/TicketsPage";
 import { TriagePage } from "./pages/TriagePage";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ClientSupportPage } from "./pages/ClientSupportPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { TicketProvider } from "./contexts/TicketContext";
 import { TicketDetailDrawer } from "./components/tickets/TicketDetailDrawer";
 import { SubmitTicketModal } from "./components/SubmitTicketModal";
 import { useTicketContext } from "./contexts/TicketContext";
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AuthenticatedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session, loading } = useAuth();
   const location = useLocation();
 
@@ -27,6 +28,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const StaffRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isStaff } = useAuth();
+  return isStaff ? <>{children}</> : <Navigate to="/support" replace />;
+};
+
+const HomeRoute: React.FC = () => {
+  const { isStaff } = useAuth();
+  return <Navigate to={isStaff ? "/dashboard" : "/support"} replace />;
+};
+
 const AppInner: React.FC = () => {
   const { isSubmitOpen, setIsSubmitOpen, triggerRefresh } = useTicketContext();
   const { session } = useAuth();
@@ -35,16 +46,18 @@ const AppInner: React.FC = () => {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<AuthenticatedRoute><HomeRoute /></AuthenticatedRoute>} />
+        <Route path="/support" element={<AuthenticatedRoute><ClientSupportPage /></AuthenticatedRoute>} />
         
-        <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-          <Route path="/" element={<DashboardPage />} />
+        <Route element={<AuthenticatedRoute><StaffRoute><AppShell /></StaffRoute></AuthenticatedRoute>}>
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/triage" element={<TriagePage />} />
           <Route path="/insights" element={<AIInsightsPage />} />
           <Route path="/analytics" element={<div className="p-8 text-white">Analytics Page (Coming Soon)</div>} />
           <Route path="/team" element={<div className="p-8 text-white">Team Page (Coming Soon)</div>} />
           <Route path="/settings" element={<div className="p-8 text-white">Settings Page (Coming Soon)</div>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<HomeRoute />} />
         </Route>
       </Routes>
       

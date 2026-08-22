@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Supabase Configuration
     SUPABASE_URL: str = ""
     SUPABASE_PUBLISHABLE_KEY: str = ""
+    # This key is only used by the backend for privileged database operations.
+    # It must never be exposed to the frontend or used as a JWT signing secret.
     SUPABASE_SECRET_KEY: str = ""
     SUPABASE_DB_URL: str = ""
     
@@ -31,6 +33,15 @@ class Settings(BaseSettings):
             "http://localhost:3000",
             "http://127.0.0.1:3000",
         ]
+
+    @property
+    def supabase_configured(self) -> bool:
+        """Whether the backend has enough configuration to call Supabase."""
+        return bool(
+            self.SUPABASE_URL.strip()
+            and self.SUPABASE_PUBLISHABLE_KEY.strip()
+            and self.SUPABASE_SECRET_KEY.strip()
+        )
 
     model_config = SettingsConfigDict(
         env_file=".env",

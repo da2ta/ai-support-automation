@@ -1,17 +1,18 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from supabase import Client
 
 from app.schemas.automation import AutomationActionResponse, AutomationActionUpdate
 from app.services.automation_service import get_automation_actions, update_action_status
-from app.dependencies import get_db_session_with_user, get_current_user_token
+from app.dependencies import get_db_session_with_user, get_current_user_token, require_staff_user
 
 router = APIRouter()
 
 @router.get("/actions", response_model=List[AutomationActionResponse])
 def fetch_actions(
     status: Optional[str] = Query(None),
-    db: Session = Depends(get_db_session_with_user)
+    db: Client = Depends(get_db_session_with_user),
+    _: dict = Depends(require_staff_user),
 ):
     return get_automation_actions(db, status)
 
@@ -19,8 +20,9 @@ def fetch_actions(
 def update_action(
     action_id: int,
     update_data: AutomationActionUpdate,
-    db: Session = Depends(get_db_session_with_user),
-    token_payload: dict = Depends(get_current_user_token)
+    db: Client = Depends(get_db_session_with_user),
+    token_payload: dict = Depends(get_current_user_token),
+    _: dict = Depends(require_staff_user),
 ):
     action = update_action_status(
         db, 

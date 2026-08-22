@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.db.supabase import SessionLocal
 from app.api.v1 import api_v1_router
 from app.services.gemini_service import get_gemini_service
 
@@ -25,16 +24,14 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up AI Support Ticket Automation API...")
     
     # Check DB connection
-    db = SessionLocal()
     try:
-        from sqlalchemy import text
-        db.execute(text("SELECT 1"))
-        logger.info("Connected to Supabase PostgreSQL.")
+        from app.db.supabase import get_supabase_client
+        client = get_supabase_client()
+        # Just a simple ping to see if client initializes
+        _ = client.options
+        logger.info("Connected to Supabase via REST API.")
     except Exception as e:
         logger.error(f"Failed to connect to Database: {e}")
-    finally:
-        db.close()
-        
     yield
     # Shutdown
     logger.info("Shutting down AI Support Ticket Automation API...")

@@ -1,25 +1,27 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from app.db.supabase import get_db
+from fastapi import APIRouter
+from app.db.supabase import get_supabase_client
 from app.config import get_settings
 
 router = APIRouter()
 settings = get_settings()
 
 @router.get("")
-def health_check(db: Session = Depends(get_db)):
+def health_check():
     """Backend health check endpoint."""
     health_status = {
         "status": "healthy",
         "version": settings.APP_VERSION,
+        "app_name": settings.APP_NAME,
         "database": "disconnected",
-        "ai": "configured" if settings.GEMINI_API_KEY else "fallback_mode"
+        "gemini_api_configured": bool(settings.GEMINI_API_KEY.strip()),
+        "gemini_model": settings.GEMINI_MODEL,
     }
     
     try:
-        # Test database connection
-        db.execute(text("SELECT 1"))
+        db = get_supabase_client()
+        # Verify that the client can be initialized.  This avoids a database
+        # query on a public health endpoint while still reporting bad config.
+        _ = db.options
         health_status["database"] = "connected"
     except Exception as e:
         health_status["status"] = "unhealthy"

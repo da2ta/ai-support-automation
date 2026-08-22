@@ -59,7 +59,7 @@ CREATE TABLE public.tickets (
     status TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'In Progress', 'Resolved', 'Closed')),
     category TEXT NOT NULL,
     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Critical')),
-    sentiment TEXT NOT NULL CHECK (sentiment IN ('Positive', 'Neutral', 'Negative', 'Angry', 'Frustrated')),
+    sentiment TEXT NOT NULL CHECK (sentiment IN ('Positive', 'Neutral', 'Urgent', 'Angry', 'Frustrated')),
     summary TEXT NOT NULL,
     customer_intent TEXT NOT NULL,
     suggested_action TEXT NOT NULL,

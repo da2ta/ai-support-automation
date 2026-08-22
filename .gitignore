@@ -1,0 +1,16 @@
+# Local configuration must never be committed.
+.env
+.env.*
+!.env.example
+
+# Local runtimes and generated artifacts
+backend/venv/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vercel
+
+# Local one-off database maintenance helpers may contain connection details.
+backend/execute_sql.py
