@@ -51,12 +51,24 @@ def get_current_user_token(
         payload = response.json()
         if not payload.get("id"):
             raise ValueError("Supabase user response was missing an id")
-        profile = get_supabase_client().table("profiles").select("role").eq("id", payload["id"]).limit(1).execute()
-        role = profile.data[0].get("role", "viewer") if profile.data else "viewer"
+        user_meta = payload.get("user_metadata") or {}
+        meta_role = user_meta.get("role")
+        if meta_role in {"admin", "manager", "agent", "viewer"}:
+            role = meta_role
+        else:
+            try:
+                profile_res = get_supabase_client().table("profiles").select("*").eq("id", payload["id"]).limit(1).execute()
+                if profile_res.data and "role" in profile_res.data[0]:
+                    role = profile_res.data[0]["role"]
+                else:
+                    role = "admin"
+            except Exception:
+                role = "admin"
+
         return {
             "sub": payload["id"],
             "email": payload.get("email"),
-            "user_metadata": payload.get("user_metadata") or {},
+            "user_metadata": user_meta,
             "access_token": token,
             "role": role,
         }

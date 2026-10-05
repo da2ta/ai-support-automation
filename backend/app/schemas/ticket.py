@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from app.schemas.ai_analysis import TicketCategory, TicketPriority, TicketSentiment, AIAnalysisResult
 
 
@@ -14,7 +14,7 @@ class TicketStatus(str, Enum):
 
 class TicketCreate(BaseModel):
     customer_name: str = Field(..., min_length=2, max_length=128, description="Full name of customer")
-    customer_email: EmailStr = Field(..., description="Valid email address of customer")
+    customer_email: str = Field(..., min_length=3, max_length=256, description="Email address of customer")
     subject: str = Field(..., min_length=3, max_length=256, description="Subject line of support message")
     message: str = Field(..., min_length=10, max_length=10000, description="Detailed support issue description")
 

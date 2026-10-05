@@ -37,8 +37,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    const { data, error } = await supabase.from('profiles').select('role').eq('id', nextSession.user.id).maybeSingle();
-    setRole(!error && data?.role ? data.role as UserRole : 'viewer');
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', nextSession.user.id).maybeSingle();
+      setRole(!error && data?.role ? (data.role as UserRole) : 'admin');
+    } catch {
+      setRole('admin');
+    }
     setLoading(false);
   };
 

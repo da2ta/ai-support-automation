@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, UUID4, EmailStr
+from pydantic import BaseModel, UUID4
 
 class ProfileResponse(BaseModel):
     id: UUID4
     full_name: str
-    email: EmailStr
+    email: str
     avatar_url: Optional[str] = None
     role: str
     created_at: datetime

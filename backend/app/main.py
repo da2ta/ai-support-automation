@@ -61,7 +61,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global unhandled error on {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": "An unexpected error occurred while processing your request."}
+        content={"detail": f"{type(exc).__name__}: {str(exc)}"}
     )
 
 # The health check is now moved to api.v1.health 
